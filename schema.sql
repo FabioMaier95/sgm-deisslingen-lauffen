@@ -1,0 +1,4 @@
+-- Die produktive Datenbank wurde im Supabase-Projekt bereits per Migration eingerichtet.
+-- Enthalten: teams, profiles, team_members, family_links, matches, events,
+-- event_responses, news, push_topics, push_subscriptions, push_topic_subscriptions
+-- sowie RLS, Rollen-/Familienberechtigungen und den Auth-User-Trigger.
