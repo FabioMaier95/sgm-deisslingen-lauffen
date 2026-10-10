@@ -250,22 +250,119 @@ function LoginPage({ onSuccess }: { onSuccess: () => void }) {
   </div>;
 }
 
+
 function MemberPage({ profile, email, onSignOut }: { profile: any; email?: string; onSignOut: () => void }) {
-  return <div className="content narrow">
-    <PageTitle eyebrow="Mitgliederbereich" title={`Hallo ${profile?.first_name || profile?.display_name || "Mitglied"}!`} text="Dein persönlicher Bereich der SGM-App."/>
-    <div className="role-preview">
-      <strong>Dein Konto</strong>
-      <span>✉️ {email}</span>
-      <span>👤 Rolle: {profile?.role === "admin" ? "Administrator" : profile?.role === "trainer" ? "Trainer" : "Mitglied"}</span>
-      <span>🏷️ Mitgliedstyp: {profile?.member_type || "noch nicht festgelegt"}</span>
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const changePassword = async () => {
+    setMessage("");
+
+    if (!supabase) {
+      setMessage("Verbindung zu Supabase nicht verfügbar.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setMessage("Das Passwort muss mindestens 8 Zeichen haben.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setMessage("Die Passwörter stimmen nicht überein.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+      if (error) throw error;
+
+      setNewPassword("");
+      setConfirmPassword("");
+      setMessage("Passwort erfolgreich geändert.");
+    } catch (e: any) {
+      setMessage(e?.message || "Passwortänderung fehlgeschlagen.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="content narrow">
+      <PageTitle
+        eyebrow="Mitgliederbereich"
+        title={`Hallo ${profile?.first_name || profile?.display_name || "Mitglied"}!`}
+        text="Dein persönlicher Bereich der SGM-App."
+      />
+
+      <div className="role-preview">
+        <strong>Dein Konto</strong>
+        <span>✉️ {email}</span>
+        <span>
+          👤 Rolle: {profile?.role === "admin"
+            ? "Administrator"
+            : profile?.role === "trainer" ? "Trainer" : "Mitglied"}
+        </span>
+        <span>🏷️ Mitgliedstyp: {profile?.member_type || "noch nicht festgelegt"}</span>
+      </div>
+
+      <div className="settings-card password-card">
+        <strong>Passwort ändern</strong>
+        <p className="muted small">
+          Dein Passwort wird sicher über Supabase Auth geändert.
+          Es wird nicht in der Vereinsdatenbank gespeichert.
+        </p>
+
+        <label>
+          Neues Passwort
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            placeholder="Mindestens 8 Zeichen"
+          />
+        </label>
+
+        <label>
+          Neues Passwort wiederholen
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={e => setConfirmPassword(e.target.value)}
+            placeholder="Passwort erneut eingeben"
+          />
+        </label>
+
+        {message && <div className="notice" role="status">{message}</div>}
+
+        <button
+          className="button full"
+          onClick={changePassword}
+          disabled={busy}
+        >
+          {busy ? "Wird gespeichert…" : "Passwort speichern"}
+        </button>
+      </div>
+
+      <div className="settings-card member-next">
+        <strong>Weitere Mitgliederfunktionen</strong>
+        <p className="muted small">
+          Mannschaften, Kinder, Termine und Zu- oder Absagen
+          ergänzen wir in den nächsten Ausbaustufen.
+        </p>
+        <button className="button" onClick={onSignOut}>
+          <LogOut size={18} /> Abmelden
+        </button>
+      </div>
     </div>
-    <div className="settings-card">
-      <strong>Als Nächstes</strong>
-      <p className="muted small">Hier werden anschließend deine Mannschaften, Kinder, Termine, Zu-/Absagen und persönliche Push-Einstellungen angezeigt.</p>
-      <button className="button" onClick={onSignOut}><LogOut size={18}/> Abmelden</button>
-    </div>
-  </div>;
+  );
 }
+
 
 function PageTitle({ eyebrow, title, text }: { eyebrow: string; title: string; text: string }) {
   return <div className="page-title"><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{text}</p></div>;
