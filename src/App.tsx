@@ -188,67 +188,246 @@ function Toggle({ label, checked, onClick }: { label: string; checked: boolean; 
   return <button className="toggle-row" onClick={onClick}><span>{label}</span><span className={checked ? "switch on" : "switch"}><span/></span></button>;
 }
 
+
 function LoginPage({ onSuccess }: { onSuccess: () => void }) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "reset" | "new-password">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    if (!supabase) return;
+
+    const url = new URL(window.location.href);
+    const hash = new URLSearchParams(url.hash.replace(/^#/, ""));
+    const queryType = url.searchParams.get("type");
+    const hashType = hash.get("type");
+
+    if (queryType === "recovery" || hashType === "recovery") {
+      setMode("new-password");
+      setMessage("Bitte lege dein neues Passwort fest.");
+    }
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setMode("new-password");
+        setMessage("Bitte lege dein neues Passwort fest.");
+      }
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
   const submit = async () => {
     setMessage("");
+
     if (!supabase) {
-      setMessage("Supabase ist noch nicht in der lokalen Umgebung konfiguriert.");
+      setMessage("Supabase ist nicht konfiguriert.");
       return;
     }
-    if (!email || !password || (mode === "signup" && !name)) {
-      setMessage("Bitte alle erforderlichen Felder ausfüllen.");
+
+    if (!email.trim() && (mode === "login" || mode === "signup" || mode === "reset")) {
+      setMessage("Bitte gib deine E-Mail-Adresse ein.");
       return;
     }
+
+    if (mode !== "reset" && password.length < 8) {
+      setMessage("Das Passwort muss mindestens 8 Zeichen haben.");
+      return;
+    }
+
+    if (mode === "signup" && !name.trim()) {
+      setMessage("Bitte gib deinen Namen ein.");
+      return;
+    }
+
+    if (mode === "new-password" && password !== confirmPassword) {
+      setMessage("Die Passwörter stimmen nicht überein.");
+      return;
+    }
+
     setBusy(true);
+
     try {
       if (mode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password
+        });
         if (error) throw error;
         onSuccess();
-      } else {
+      } else if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: email.trim(),
           password,
           options: {
-            data: { display_name: name },
+            data: { display_name: name.trim() },
             emailRedirectTo: window.location.origin
           }
         });
         if (error) throw error;
-        if (data.session) onSuccess();
-        else setMessage("Registrierung erfolgreich. Falls E-Mail-Bestätigung aktiviert ist, bitte zuerst den Link in der E-Mail anklicken.");
+
+        if (data.session) {
+          onSuccess();
+        } else {
+          setMessage("Registrierung gestartet. Bitte prüfe deine E-Mails und bestätige dein Konto, falls erforderlich.");
+        }
+      } else if (mode === "reset") {
+        const { error } = await supabase.auth.resetPasswordForEmail(
+          email.trim(),
+          { redirectTo: window.location.origin }
+        );
+        if (error) throw error;
+
+        setMessage("Falls ein Konto mit dieser Adresse besteht, erhältst du eine E-Mail zum Zurücksetzen. Prüfe auch den Spam-Ordner.");
+      } else {
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+
+        setPassword("");
+        setConfirmPassword("");
+        setMessage("Dein Passwort wurde erfolgreich gespeichert. Du kannst dich jetzt anmelden.");
+
+        await supabase.auth.signOut();
+        setMode("login");
+
+        // Nach dem Speichern zurück zur normalen Loginseite.
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
     } catch (e: any) {
-      setMessage(e?.message || "Anmeldung fehlgeschlagen.");
+      setMessage(e?.message || "Die Aktion ist fehlgeschlagen. Bitte versuche es erneut.");
     } finally {
       setBusy(false);
     }
   };
 
-  return <div className="content narrow">
-    <PageTitle eyebrow="Geschützter Bereich" title={mode === "login" ? "Mitglieder-Login" : "Konto erstellen"} text="Persönliche Zugangsdaten für Mitglieder, Spieler und Trainer."/>
-    <div className="login-card">
-      {mode === "signup" && <label>Name<input value={name} onChange={e => setName(e.target.value)} placeholder="Vor- und Nachname"/></label>}
-      <label>E-Mail-Adresse<input type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@beispiel.de"/></label>
-      <label>Passwort<input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="Mindestens 6 Zeichen"/></label>
-      {message && <div className="notice">{message}</div>}
-      <button className="button full" onClick={submit} disabled={busy}>
-        <LogIn size={18}/> {busy ? "Bitte warten…" : mode === "login" ? "Anmelden" : "Konto erstellen"}
-      </button>
-      <button className="text-button centered" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setMessage(""); }}>
-        {mode === "login" ? "Noch kein Konto? Registrieren" : "Bereits registriert? Anmelden"}
-      </button>
-      <p className="muted small">Die Anmeldung läuft direkt über Supabase Auth. Passwörter werden nicht in der App-Datenbank gespeichert.</p>
+  const title =
+    mode === "login" ? "Mitglieder-Login" :
+    mode === "signup" ? "Konto erstellen" :
+    mode === "reset" ? "Passwort vergessen?" :
+    "Neues Passwort festlegen";
+
+  return (
+    <div className="content narrow">
+      <PageTitle
+        eyebrow="Geschützter Bereich"
+        title={title}
+        text="Deine persönlichen Zugangsdaten für die SGM-App."
+      />
+
+      <div className="login-card">
+        {mode === "signup" && (
+          <label>
+            Name
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Vor- und Nachname"
+              autoComplete="name"
+            />
+          </label>
+        )}
+
+        {(mode === "login" || mode === "signup" || mode === "reset") && (
+          <label>
+            E-Mail-Adresse
+            <input
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="name@beispiel.de"
+            />
+          </label>
+        )}
+
+        {mode !== "reset" && (
+          <label>
+            {mode === "new-password" ? "Neues Passwort" : "Passwort"}
+            <input
+              type="password"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Mindestens 8 Zeichen"
+            />
+          </label>
+        )}
+
+        {mode === "new-password" && (
+          <label>
+            Neues Passwort wiederholen
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="Passwort erneut eingeben"
+            />
+          </label>
+        )}
+
+        {message && (
+          <div className="notice" role="status">
+            {message}
+          </div>
+        )}
+
+        <button className="button full" onClick={submit} disabled={busy}>
+          {busy
+            ? "Bitte warten…"
+            : mode === "login"
+            ? "Anmelden"
+            : mode === "signup"
+            ? "Konto erstellen"
+            : mode === "reset"
+            ? "Wiederherstellungs-E-Mail senden"
+            : "Neues Passwort speichern"}
+        </button>
+
+        {mode === "login" && (
+          <button
+            className="text-button centered"
+            onClick={() => { setMode("reset"); setMessage(""); }}
+          >
+            Passwort vergessen?
+          </button>
+        )}
+
+        {mode !== "login" && (
+          <button
+            className="text-button centered"
+            onClick={() => {
+              setMode("login");
+              setPassword("");
+              setConfirmPassword("");
+              setMessage("");
+            }}
+          >
+            Zurück zur Anmeldung
+          </button>
+        )}
+
+        {mode === "login" && (
+          <button
+            className="text-button centered"
+            onClick={() => { setMode("signup"); setMessage(""); }}
+          >
+            Noch kein Konto? Registrieren
+          </button>
+        )}
+
+        <p className="muted small">
+          Deine Passwörter werden sicher über Supabase Auth verwaltet.
+        </p>
+      </div>
     </div>
-  </div>;
+  );
 }
+
 
 
 function MemberPage({ profile, email, onSignOut }: { profile: any; email?: string; onSignOut: () => void }) {
