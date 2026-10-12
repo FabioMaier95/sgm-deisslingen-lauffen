@@ -356,11 +356,23 @@ function HomePage({ onNavigate, pushEnabled, onPush }: { onNavigate: (p: string)
         {events.map((event) => <div className="event-card" key={event.title}><div className="date-badge"><CalendarDays size={19}/></div><div><strong>{event.title}</strong><span>{event.date}</span><span>{event.place}</span></div></div>)}
       </div>
 
-      <section className="push-banner"><InstallAppBanner />
-        <div className="push-icon"><Bell /></div>
-        <div><strong>Keine wichtige Info verpassen</strong><p>Abonniere Push-Mitteilungen für die aktiven Mannschaften und Vereinsnews.</p></div>
-        <button className={pushEnabled ? "button enabled" : "button"} onClick={onPush}>{pushEnabled ? "Aktiv ✓" : "Push aktivieren"}</button>
-      </section>
+      <InstallAppBanner />
+
+<section className="push-banner">
+  <div className="push-icon"><Bell /></div>
+  <div>
+    <strong>Keine wichtige Info verpassen</strong>
+    <p>
+      Abonniere Push-Mitteilungen für die aktiven Mannschaften und Vereinsnews.
+    </p>
+  </div>
+  <button
+    className={pushEnabled ? "button enabled" : "button"}
+    onClick={onPush}
+  >
+    {pushEnabled ? "Aktiv ✓" : "Push aktivieren"}
+  </button>
+</section>
 
       <section className="section-head"><div><p className="eyebrow">Aktuell</p><h2>Neuigkeiten</h2></div><button className="text-button" onClick={() => onNavigate("news")}>Alle News <ChevronRight size={17}/></button></section>
       <article className="news-card"><span className="news-tag">Verein</span><h3>Die neue SGM-App kommt!</h3><p>Mit der neuen PWA sollen Spiele, Termine, News und Push-Mitteilungen künftig direkt auf dem Smartphone verfügbar sein.</p></article>
