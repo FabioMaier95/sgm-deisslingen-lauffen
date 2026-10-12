@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+
 import {
-  Bell, CalendarDays, ChevronRight, Clock3, Home, LogIn,
+  Bell, CalendarDays, ChevronRight, Clock3, Download, Home, LogIn,
   LogOut, MapPin, Menu, Newspaper, Shield, Trophy, UserRound, X
-} from "lucide-react";
+} from "lucide-react"; 
+
 import { supabase } from "./main";
 
 type Match = {
