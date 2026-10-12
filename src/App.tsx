@@ -208,9 +208,75 @@ function InstallAppBanner() {
 
       <div>
         <strong>SGM-App auf dem Home-Bildschirm</strong>
-        <p>
-          Installiere die App für einen schnellen Zugriff direkt vom Smartphone.
-        </p>
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
+function InstallAppBanner() {
+  const [installPrompt, setInstallPrompt] =
+    useState<InstallPromptEvent | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [isIos, setIsIos] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    const ios =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone === true;
+
+    setIsIos(ios);
+    setIsInstalled(standalone);
+
+    const handlePrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    };
+
+    const handleInstalled = () => {
+      setIsInstalled(true);
+      setInstallPrompt(null);
+      setShowHelp(false);
+    };
+
+    window.addEventListener("beforeinstallprompt", handlePrompt);
+    window.addEventListener("appinstalled", handleInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handlePrompt);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, []);
+
+  const installApp = async () => {
+    if (installPrompt) {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+
+      if (choice.outcome === "accepted") {
+        setInstallPrompt(null);
+      }
+      return;
+    }
+
+    setShowHelp((current) => !current);
+  };
+
+  if (isInstalled) return null;
+
+  return (
+    <section className="push-banner install-banner">
+      <div className="push-icon">
+        <Download />
+      </div>
+
+      <div>
+        <strong>SGM-App zum Home-Bildschirm hinzufügen</strong>
+        <p>Starte die App künftig direkt über dein Smartphone.</p>
       </div>
 
       <button className="button" onClick={installApp}>
@@ -218,30 +284,27 @@ function InstallAppBanner() {
         App hinzufügen
       </button>
 
-      {showIosHelp && (
+      {showHelp && (
         <div className="install-help">
-          <strong>So fügst du die SGM-App hinzu:</strong>
+          <strong>So funktioniert es:</strong>
           {isIos ? (
             <ol>
               <li>Öffne diese Seite in Safari.</li>
-              <li>Tippe auf das Teilen-Symbol (Quadrat mit Pfeil nach oben).</li>
+              <li>Tippe auf „Teilen“.</li>
               <li>Wähle „Zum Home-Bildschirm“.</li>
-              <li>Tippe oben auf „Hinzufügen“.</li>
+              <li>Tippe auf „Hinzufügen“.</li>
             </ol>
           ) : (
             <p>
               Öffne das Browser-Menü und wähle „App installieren“ oder
-              „Zum Startbildschirm hinzufügen“. Falls diese Option fehlt,
-              unterstützt der aktuelle Browser den Installationsdialog
-              möglicherweise nicht.
+              „Zum Startbildschirm hinzufügen“. Wenn die Option fehlt,
+              unterstützt dein Browser den Installationsdialog eventuell nicht.
             </p>
           )}
         </div>
       )}
     </section>
   );
-}
-
 }
 
 function HomePage({ onNavigate, pushEnabled, onPush }: { onNavigate: (p: string) => void; pushEnabled: boolean; onPush: () => void }) {
