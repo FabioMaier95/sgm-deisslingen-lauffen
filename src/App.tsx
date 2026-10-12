@@ -194,11 +194,97 @@ function InstallAppBanner() {
     }
 
     setShowIosHelp((current) => !current);
+function MenuItem({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button className="drawer-item" onClick={onClick}>
+      {icon}
+      <span>{label}</span>
+      <ChevronRight size={18} />
+    </button>
+  );
+}
+
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{
+    outcome: "accepted" | "dismissed";
+    platform: string;
+  }>;
+};
+
+function InstallAppBanner() {
+  const [installPrompt, setInstallPrompt] =
+    useState<InstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [showIosHelp, setShowIosHelp] = useState(false);
+  const [isIos, setIsIos] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+    const ios =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" &&
+        navigator.maxTouchPoints > 1);
+
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone === true;
+
+    setIsIos(ios);
+    setIsStandalone(standalone);
+    setIsInstalled(standalone);
+
+    const handleInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    };
+
+    const handleInstalled = () => {
+      setIsInstalled(true);
+      setIsStandalone(true);
+      setInstallPrompt(null);
+      setShowIosHelp(false);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
+    window.addEventListener("appinstalled", handleInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, []);
+
+  const installApp = async () => {
+    if (isInstalled || isStandalone) return;
+
+    if (isIos) {
+      setShowIosHelp((current) => !current);
+      return;
+    }
+
+    if (installPrompt) {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+
+      if (choice.outcome === "accepted") {
+        setInstallPrompt(null);
+      }
+      return;
+    }
+
+    setShowIosHelp((current) => !current);
   };
 
-  if (isInstalled || isStandalone) {
-    return null;
-  }
+  if (isInstalled || isStandalone) return null;
 
   return (
     <section className="push-banner install-banner">
@@ -207,7 +293,7 @@ function InstallAppBanner() {
       </div>
 
       <div>
-        <strong>SGM-App auf dem Home-Bildschirm</strong>
+        <strong>SGM-App zum Home-Bildschirm hinzufügen</strong>
         <p>
           Installiere die App für einen schnellen Zugriff direkt vom Smartphone.
         </p>
@@ -224,9 +310,9 @@ function InstallAppBanner() {
           {isIos ? (
             <ol>
               <li>Öffne diese Seite in Safari.</li>
-              <li>Tippe auf das Teilen-Symbol (Quadrat mit Pfeil nach oben).</li>
+              <li>Tippe auf das Teilen-Symbol.</li>
               <li>Wähle „Zum Home-Bildschirm“.</li>
-              <li>Tippe oben auf „Hinzufügen“.</li>
+              <li>Tippe auf „Hinzufügen“.</li>
             </ol>
           ) : (
             <p>
@@ -240,8 +326,6 @@ function InstallAppBanner() {
       )}
     </section>
   );
-}
-
 }
 
 function HomePage({ onNavigate, pushEnabled, onPush }: { onNavigate: (p: string) => void; pushEnabled: boolean; onPush: () => void }) {
