@@ -87,6 +87,15 @@ const loadRoles = async (userId: string) => {
       .then(({ data }) => setProfile(data));
   }, [session]);
 
+    useEffect(() => {
+    if (!session?.user?.id) {
+      setRoles([]);
+      return;
+    }
+
+    void loadRoles(session.user.id);
+  }, [session?.user?.id]);
+
   const navigate = (next: string) => {
     setPage(next);
     setMenu(false);
@@ -152,7 +161,16 @@ const loadRoles = async (userId: string) => {
         {page === "push" && <PushPage enabled={pushEnabled} onToggle={() => setPushEnabled(!pushEnabled)} />}
         {page === "login" && <LoginPage onSuccess={() => navigate("member")} />}
         {page === "member" && session && <MemberPage profile={profile} email={session.user.email} onSignOut={signOut} />}
-        {page === "member" && !session && <LoginPage onSuccess={() => navigate("member")} />}
+        {page === "member" && session && (
+  <MemberPage
+    profile={profile}
+    email={session.user.email}
+    roles={roles}
+    rolesLoading={rolesLoading}
+    onSignOut={signOut}
+    onAdmin={() => navigate("admin")}
+  />
+)}
         {page === "admin" && session && roles.includes("admin") && (<AdminRolesPage /> )}
       </main>
 
