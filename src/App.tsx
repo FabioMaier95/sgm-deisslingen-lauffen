@@ -7,6 +7,20 @@ import {
 
 import { supabase } from "./main";
 
+type AppRole = "admin" | "trainer" | "member";
+
+const ROLE_LABELS: Record<AppRole, string> = {
+  admin: "Administrator",
+  trainer: "Trainer",
+  member: "Mitglied",
+};
+
+const MEMBER_TYPE_LABELS: Record<string, string> = {
+  player: "Spieler",
+  parent: "Elternteil",
+  guardian: "Erziehungsberechtigter",
+  other: "Sonstiges",
+};
 type Match = {
   id: number;
   team: string;
