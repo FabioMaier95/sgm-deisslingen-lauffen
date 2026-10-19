@@ -49,6 +49,27 @@ function App() {
   const [pushEnabled, setPushEnabled] = useState(false);
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
+const [roles, setRoles] = useState<AppRole[]>([]);
+const [rolesLoading, setRolesLoading] = useState(false);
+const loadRoles = async (userId: string) => {
+  if (!supabase) return;
+
+  setRolesLoading(true);
+
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("profile_id", userId);
+
+  if (error) {
+    console.error("Rollen konnten nicht geladen werden:", error);
+    setRoles([]);
+  } else {
+    setRoles((data ?? []).map((item) => item.role as AppRole));
+  }
+
+  setRolesLoading(false);
+};
 
   useEffect(() => {
     if (!supabase) return;
@@ -114,6 +135,9 @@ function App() {
               <MenuItem icon={<Newspaper />} label="News" onClick={() => navigate("news")} />
               <MenuItem icon={<Bell />} label="Push-Mitteilungen" onClick={() => navigate("push")} />
               <MenuItem icon={<Shield />} label={session ? "Mein Mitgliederbereich" : "Mitgliederbereich"} onClick={() => navigate(session ? "member" : "login")} />
+              {roles.includes("admin") && ( <MenuItem  icon={<Shield />}label="Administration" onClick={() => navigate("admin")}
+                />
+              )}
             </nav>
             {session && <button className="drawer-item" onClick={signOut}><LogOut /><span>Abmelden</span></button>}
           </aside>
@@ -129,6 +153,7 @@ function App() {
         {page === "login" && <LoginPage onSuccess={() => navigate("member")} />}
         {page === "member" && session && <MemberPage profile={profile} email={session.user.email} onSignOut={signOut} />}
         {page === "member" && !session && <LoginPage onSuccess={() => navigate("member")} />}
+        {page === "admin" && session && roles.includes("admin") && (<AdminRolesPage /> )}
       </main>
 
       <footer>
