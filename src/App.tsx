@@ -665,17 +665,113 @@ function MemberPage({ profile, email, onSignOut }: { profile: any; email?: strin
         <span>✉️ {email}</span>
         <span>
           👤 Rolle: {profile?.role === "admin"
-            ? "Administrator"
-            : profile?.role === "trainer" ? "Trainer" : "Mitglied"}
+
+function MemberPage({
+  profile,
+  email,
+  roles,
+  rolesLoading,
+  onSignOut,
+  onAdmin,
+}: {
+  profile: any;
+  email?: string;
+  roles: AppRole[];
+  rolesLoading: boolean;
+  onSignOut: () => void;
+  onAdmin: () => void;
+}) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const changePassword = async () => {
+    setMessage("");
+
+    if (!supabase) {
+      setMessage("Verbindung zu Supabase nicht verfügbar.");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setMessage("Das Passwort muss mindestens 8 Zeichen haben.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setMessage("Die Passwörter stimmen nicht überein.");
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) throw error;
+
+      setNewPassword("");
+      setConfirmPassword("");
+      setMessage("Passwort erfolgreich geändert.");
+    } catch (e: any) {
+      setMessage(e?.message || "Passwortänderung fehlgeschlagen.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const memberType = profile?.member_type || "other";
+
+  return (
+    <div className="content narrow">
+      <PageTitle
+        eyebrow="Mitgliederbereich"
+        title={`Hallo ${profile?.first_name || profile?.display_name || "Mitglied"}!`}
+        text="Dein persönlicher Bereich der SGM-App."
+      />
+
+      <div className="role-preview">
+        <strong>Dein Konto</strong>
+        <span>✉️ {email || "Keine E-Mail-Adresse verfügbar"}</span>
+
+        <strong>Systemrollen</strong>
+        {rolesLoading ? (
+          <span>Rollen werden geladen …</span>
+        ) : roles.length ? (
+          roles.map((role) => (
+            <span key={role}>
+              🛡️ {ROLE_LABELS[role] ?? role}
+            </span>
+          ))
+        ) : (
+          <span>Keine Systemrollen gefunden.</span>
+        )}
+
+        <strong>Mitgliedstyp</strong>
+        <span>
+          🏷️ {MEMBER_TYPE_LABELS[memberType] ?? "Sonstiges"}
         </span>
-        <span>🏷️ Mitgliedstyp: {profile?.member_type || "noch nicht festgelegt"}</span>
       </div>
+
+      {roles.includes("admin") && (
+        <div className="settings-card">
+          <strong>Vereinsverwaltung</strong>
+          <p className="muted small">
+            Benutzerrollen vereinsweit verwalten.
+          </p>
+          <button className="button" onClick={onAdmin}>
+            <Shield size={18} /> Administration öffnen
+          </button>
+        </div>
+      )}
 
       <div className="settings-card password-card">
         <strong>Passwort ändern</strong>
         <p className="muted small">
-          Dein Passwort wird sicher über Supabase Auth geändert.
-          Es wird nicht in der Vereinsdatenbank gespeichert.
+          Dein Passwort wird über Supabase Auth geändert.
         </p>
 
         <label>
@@ -684,7 +780,7 @@ function MemberPage({ profile, email, onSignOut }: { profile: any; email?: strin
             type="password"
             autoComplete="new-password"
             value={newPassword}
-            onChange={e => setNewPassword(e.target.value)}
+            onChange={(e) => setNewPassword(e.target.value)}
             placeholder="Mindestens 8 Zeichen"
           />
         </label>
@@ -695,7 +791,7 @@ function MemberPage({ profile, email, onSignOut }: { profile: any; email?: strin
             type="password"
             autoComplete="new-password"
             value={confirmPassword}
-            onChange={e => setConfirmPassword(e.target.value)}
+            onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Passwort erneut eingeben"
           />
         </label>
@@ -707,16 +803,11 @@ function MemberPage({ profile, email, onSignOut }: { profile: any; email?: strin
           onClick={changePassword}
           disabled={busy}
         >
-          {busy ? "Wird gespeichert…" : "Passwort speichern"}
+          {busy ? "Wird gespeichert …" : "Passwort speichern"}
         </button>
       </div>
 
-      <div className="settings-card member-next">
-        <strong>Weitere Mitgliederfunktionen</strong>
-        <p className="muted small">
-          Mannschaften, Kinder, Termine und Zu- oder Absagen
-          ergänzen wir in den nächsten Ausbaustufen.
-        </p>
+      <div className="settings-card">
         <button className="button" onClick={onSignOut}>
           <LogOut size={18} /> Abmelden
         </button>
@@ -724,6 +815,7 @@ function MemberPage({ profile, email, onSignOut }: { profile: any; email?: strin
     </div>
   );
 }
+
 
 
 function PageTitle({ eyebrow, title, text }: { eyebrow: string; title: string; text: string }) {
