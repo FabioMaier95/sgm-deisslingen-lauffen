@@ -629,8 +629,21 @@ function LoginPage({ onSuccess }: { onSuccess: () => void }) {
 }
 
 
-
-function MemberPage({ profile, email, onSignOut }: { profile: any; email?: string; onSignOut: () => void }) {
+function MemberPage({
+  profile,
+  email,
+  roles,
+  rolesLoading,
+  onSignOut,
+  onAdmin,
+}: {
+  profile: any;
+  email?: string;
+  roles: AppRole[];
+  rolesLoading: boolean;
+  onSignOut: () => void;
+  onAdmin: () => void;
+}) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -643,20 +656,24 @@ function MemberPage({ profile, email, onSignOut }: { profile: any; email?: strin
       setMessage("Verbindung zu Supabase nicht verfügbar.");
       return;
     }
+
     if (newPassword.length < 8) {
       setMessage("Das Passwort muss mindestens 8 Zeichen haben.");
       return;
     }
+
     if (newPassword !== confirmPassword) {
       setMessage("Die Passwörter stimmen nicht überein.");
       return;
     }
 
     setBusy(true);
+
     try {
       const { error } = await supabase.auth.updateUser({
-        password: newPassword
+        password: newPassword,
       });
+
       if (error) throw error;
 
       setNewPassword("");
@@ -669,6 +686,8 @@ function MemberPage({ profile, email, onSignOut }: { profile: any; email?: strin
     }
   };
 
+  const memberType = profile?.member_type || "other";
+
   return (
     <div className="content narrow">
       <PageTitle
@@ -679,9 +698,86 @@ function MemberPage({ profile, email, onSignOut }: { profile: any; email?: strin
 
       <div className="role-preview">
         <strong>Dein Konto</strong>
-        <span>✉️ {email}</span>
+        <span>✉️ {email || "Keine E-Mail-Adresse verfügbar"}</span>
+
+        <strong>Systemrollen</strong>
+        {rolesLoading ? (
+          <span>Rollen werden geladen …</span>
+        ) : roles.length ? (
+          roles.map((role) => (
+            <span key={role}>
+              🛡️ {ROLE_LABELS[role] ?? role}
+            </span>
+          ))
+        ) : (
+          <span>Keine Systemrollen gefunden.</span>
+        )}
+
+        <strong>Mitgliedstyp</strong>
         <span>
-          👤 Rolle: {profile?.role === "admin"
+          🏷️ {MEMBER_TYPE_LABELS[memberType] ?? "Sonstiges"}
+        </span>
+      </div>
+
+      {roles.includes("admin") && (
+        <div className="settings-card">
+          <strong>Vereinsverwaltung</strong>
+          <p className="muted small">
+            Benutzerrollen vereinsweit verwalten.
+          </p>
+          <button className="button" onClick={onAdmin}>
+            <Shield size={18} /> Administration öffnen
+          </button>
+        </div>
+      )}
+
+      <div className="settings-card password-card">
+        <strong>Passwort ändern</strong>
+        <p className="muted small">
+          Dein Passwort wird über Supabase Auth geändert.
+        </p>
+
+        <label>
+          Neues Passwort
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="Mindestens 8 Zeichen"
+          />
+        </label>
+
+        <label>
+          Neues Passwort wiederholen
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Passwort erneut eingeben"
+          />
+        </label>
+
+        {message && <div className="notice" role="status">{message}</div>}
+
+        <button
+          className="button full"
+          onClick={changePassword}
+          disabled={busy}
+        >
+          {busy ? "Wird gespeichert …" : "Passwort speichern"}
+        </button>
+      </div>
+
+      <div className="settings-card">
+        <button className="button" onClick={onSignOut}>
+          <LogOut size={18} /> Abmelden
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function AdminRolesPage() {
   const [users, setUsers] = useState<any[]>([]);
