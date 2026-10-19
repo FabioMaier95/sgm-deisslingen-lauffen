@@ -817,6 +817,166 @@ function MemberPage({
 }
 
 
+function AdminRolesPage() {
+  const [users, setUsers] = useState<any[]>([]);
+  const [userRoles, setUserRoles] = useState<
+    Record<string, AppRole[]>
+  >({});
+  const [loading, setLoading] = useState(true);
+  const [busyUser, setBusyUser] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+
+  const loadUsers = async () => {
+    if (!supabase) return;
+
+    setLoading(true);
+    setMessage("");
+
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, display_name, first_name, last_name, member_type")
+      .order("display_name");
+
+    if (profilesError) {
+      setMessage(`Benutzer konnten nicht geladen werden: ${profilesError.message}`);
+      setLoading(false);
+      return;
+    }
+
+    const { data: assignments, error: rolesError } = await supabase
+      .from("user_roles")
+      .select("profile_id, role");
+
+    if (rolesError) {
+      setMessage(`Rollen konnten nicht geladen werden: ${rolesError.message}`);
+      setLoading(false);
+      return;
+    }
+
+    const grouped: Record<string, AppRole[]> = {};
+
+    for (const assignment of assignments ?? []) {
+      const role = assignment.role as AppRole;
+      grouped[assignment.profile_id] ??= [];
+      grouped[assignment.profile_id].push(role);
+    }
+
+    setUsers(profiles ?? []);
+    setUserRoles(grouped);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    void loadUsers();
+  }, []);
+
+  const changeRole = async (
+    profileId: string,
+    role: AppRole,
+    add: boolean
+  ) => {
+    if (!supabase) return;
+
+    const currentRoles = userRoles[profileId] ?? [];
+
+    if (!add && currentRoles.length <= 1) {
+      setMessage("Jedem Konto muss mindestens eine Systemrolle zugeordnet bleiben.");
+      return;
+    }
+
+    setBusyUser(profileId);
+    setMessage("");
+
+    const result = add
+      ? await supabase
+          .from("user_roles")
+          .insert({ profile_id: profileId, role })
+      : await supabase
+          .from("user_roles")
+          .delete()
+          .eq("profile_id", profileId)
+          .eq("role", role);
+
+    if (result.error) {
+      setMessage(`Änderung fehlgeschlagen: ${result.error.message}`);
+    } else {
+      await loadUsers();
+      setMessage("Rollen wurden aktualisiert.");
+    }
+
+    setBusyUser(null);
+  };
+
+  return (
+    <div className="content">
+      <PageTitle
+        eyebrow="Nur Administratoren"
+        title="Benutzer & Rollen"
+        text="Vergib Systemrollen für die Vereinsverwaltung. Ein Benutzer kann mehrere Rollen besitzen."
+      />
+
+      {message && <div className="notice" role="status">{message}</div>}
+
+      {loading ? (
+        <p>Benutzer werden geladen …</p>
+      ) : users.length === 0 ? (
+        <p>Keine Benutzer gefunden.</p>
+      ) : (
+        <div className="event-list">
+          {users.map((user) => {
+            const assigned = userRoles[user.id] ?? [];
+            const displayName =
+              [user.first_name, user.last_name].filter(Boolean).join(" ") ||
+              user.display_name ||
+              "Unbenannter Benutzer";
+
+            return (
+              <section className="settings-card" key={user.id}>
+                <strong>{displayName}</strong>
+                <p className="muted small">
+                  Mitgliedstyp:{" "}
+                  {MEMBER_TYPE_LABELS[user.member_type] ??
+                    MEMBER_TYPE_LABELS.other}
+                </p>
+
+                {(["admin", "trainer", "member"] as AppRole[]).map((role) => {
+                  const checked = assigned.includes(role);
+
+                  return (
+                    <label
+                      key={role}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        margin: "10px 0",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={busyUser === user.id}
+                        onChange={(event) =>
+                          void changeRole(
+                            user.id,
+                            role,
+                            event.target.checked
+                          )
+                        }
+                      />
+                      {ROLE_LABELS[role]}
+                    </label>
+                  );
+                })}
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function PageTitle({ eyebrow, title, text }: { eyebrow: string; title: string; text: string }) {
   return <div className="page-title"><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{text}</p></div>;
