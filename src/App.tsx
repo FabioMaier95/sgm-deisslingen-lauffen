@@ -1,9 +1,7 @@
-import { useEffect, useState } from "react";
-
 import {
   Bell, CalendarDays, ChevronRight, Clock3, Download, Home, LogIn,
-  LogOut, MapPin, Menu, Newspaper, Shield, Trophy, UserRound, X
-} from "lucide-react"; 
+  LogOut, MapPin, Menu, Newspaper, Shield, Trophy, UserRound, Users, X
+} from "lucide-react";
 
 import { supabase } from "./main";
 
