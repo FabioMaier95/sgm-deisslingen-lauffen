@@ -181,6 +181,9 @@ const loadRoles = async (userId: string) => {
     onAdmin={() => navigate("admin")}
   />
 )}
+        {page === "admin" && session && roles.includes("admin") && (
+  <AdminRolesPage />
+)}
         {page === "admin-teams" && session && roles.includes("admin") && (
   <AdminTeamsPage />
 )}
