@@ -3,6 +3,8 @@ import {
   LogOut, MapPin, Menu, Newspaper, Shield, Trophy, UserRound, Users, X
 } from "lucide-react";
 
+import { useEffect, useState } from "react";
+
 import { supabase } from "./main";
 
 type AppRole = "admin" | "trainer" | "member";
@@ -179,7 +181,9 @@ const loadRoles = async (userId: string) => {
     onAdmin={() => navigate("admin")}
   />
 )}
-        {page === "admin" && session && roles.includes("admin") && (<AdminRolesPage /> )}
+        {page === "admin-teams" && session && roles.includes("admin") && (
+  <AdminTeamsPage />
+)}
       </main>
 
       <footer>
@@ -948,6 +952,232 @@ function AdminRolesPage() {
   );
 }
 
+
+function AdminTeamsPage() {
+  const [users, setUsers] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [trainerIds, setTrainerIds] = useState<string[]>([]);
+  const [assignments, setAssignments] = useState<Record<string, string[]>>({});
+  const [loading, setLoading] = useState(true);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+
+  const loadData = async () => {
+    if (!supabase) {
+      setLoading(false);
+      setMessage("Supabase ist nicht verfügbar.");
+      return;
+    }
+
+    setLoading(true);
+    setMessage("");
+
+    const [profilesResult, rolesResult, teamsResult, membersResult] =
+      await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, display_name, first_name, last_name")
+          .order("display_name"),
+        supabase.from("user_roles").select("profile_id, role"),
+        supabase
+          .from("teams")
+          .select("id, name, sort_order")
+          .eq("is_active", true)
+          .in("sort_order", [1, 2, 3])
+          .order("sort_order"),
+        supabase
+          .from("team_members")
+          .select("team_id, profile_id, is_trainer"),
+      ]);
+
+    const error =
+      profilesResult.error ||
+      rolesResult.error ||
+      teamsResult.error ||
+      membersResult.error;
+
+    if (error) {
+      setMessage(`Daten konnten nicht geladen werden: ${error.message}`);
+      setLoading(false);
+      return;
+    }
+
+    setUsers(profilesResult.data ?? []);
+    setTrainerIds(
+      (rolesResult.data ?? [])
+        .filter((item) => item.role === "trainer")
+        .map((item) => item.profile_id)
+    );
+    setTeams(teamsResult.data ?? []);
+
+    const grouped: Record<string, string[]> = {};
+    for (const item of membersResult.data ?? []) {
+      if (!item.is_trainer) continue;
+      grouped[item.profile_id] ??= [];
+      grouped[item.profile_id].push(item.team_id);
+    }
+
+    setAssignments(grouped);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  const toggleTeam = async (
+    profileId: string,
+    teamId: string,
+    add: boolean
+  ) => {
+    if (!supabase) return;
+
+    if (add && !trainerIds.includes(profileId)) {
+      setMessage(
+        "Weise dem Benutzer zuerst unter Administration die Systemrolle Trainer zu."
+      );
+      return;
+    }
+
+    const key = `${profileId}:${teamId}`;
+    setBusyKey(key);
+    setMessage("");
+
+    const result = add
+      ? await supabase.from("team_members").upsert(
+          {
+            profile_id: profileId,
+            team_id: teamId,
+            is_trainer: true,
+          },
+          { onConflict: "team_id,profile_id" }
+        )
+      : await supabase
+          .from("team_members")
+          .delete()
+          .eq("profile_id", profileId)
+          .eq("team_id", teamId)
+          .eq("is_trainer", true);
+
+    if (result.error) {
+      setMessage(`Änderung fehlgeschlagen: ${result.error.message}`);
+    } else {
+      setAssignments((current) => {
+        const next = { ...current };
+        const selected = new Set(next[profileId] ?? []);
+
+        if (add) selected.add(teamId);
+        else selected.delete(teamId);
+
+        next[profileId] = Array.from(selected);
+        return next;
+      });
+
+      setMessage(
+        add
+          ? "Trainer-Zuordnung gespeichert."
+          : "Trainer-Zuordnung entfernt."
+      );
+    }
+
+    setBusyKey(null);
+  };
+
+  return (
+    <div className="content">
+      <PageTitle
+        eyebrow="Nur Administratoren"
+        title="Mannschaftsverwaltung"
+        text="Ordne Trainer den drei Herrenmannschaften zu. Die Jugendmannschaften bleiben vorerst außen vor."
+      />
+
+      <div className="settings-card">
+        <strong>Hinweis</strong>
+        <p className="muted small">
+          Ein Trainer benötigt die Systemrolle Trainer und eine Zuordnung zur
+          jeweiligen Mannschaft. Mehrere Zuordnungen pro Trainer sind möglich.
+        </p>
+      </div>
+
+      {message && <div className="notice" role="status">{message}</div>}
+
+      {loading ? (
+        <p>Benutzer und Mannschaften werden geladen …</p>
+      ) : teams.length === 0 ? (
+        <p>Keine aktiven Mannschaften mit Sortierung 1–3 gefunden.</p>
+      ) : (
+        <div className="event-list">
+          {users.map((user) => {
+            const name =
+              [user.first_name, user.last_name].filter(Boolean).join(" ") ||
+              user.display_name ||
+              "Unbenannter Benutzer";
+
+            const isTrainer = trainerIds.includes(user.id);
+
+            return (
+              <section className="settings-card" key={user.id}>
+                <strong>{name}</strong>
+
+                {!isTrainer && (
+                  <p className="muted small">
+                    Noch keine Systemrolle Trainer. Diese muss zuerst unter
+                    Administration vergeben werden.
+                  </p>
+                )}
+
+                {teams.map((team) => {
+                  const checked = (assignments[user.id] ?? []).includes(
+                    team.id
+                  );
+                  const key = `${user.id}:${team.id}`;
+
+                  const label =
+                    team.sort_order === 1
+                      ? "SGM I"
+                      : team.sort_order === 2
+                        ? "SGM II"
+                        : "SGM III";
+
+                  return (
+                    <label
+                      key={team.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        margin: "12px 0",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={
+                          (!isTrainer && !checked) || busyKey === key
+                        }
+                        onChange={(event) =>
+                          void toggleTeam(
+                            user.id,
+                            team.id,
+                            event.target.checked
+                          )
+                        }
+                      />
+                      <span>
+                        {label}{" "}
+                        <span className="muted small">({team.name})</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PageTitle({ eyebrow, title, text }: { eyebrow: string; title: string; text: string }) {
   return <div className="page-title"><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{text}</p></div>;
