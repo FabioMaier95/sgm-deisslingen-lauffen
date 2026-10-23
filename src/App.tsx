@@ -142,9 +142,20 @@ const loadRoles = async (userId: string) => {
               <MenuItem icon={<Newspaper />} label="News" onClick={() => navigate("news")} />
               <MenuItem icon={<Bell />} label="Push-Mitteilungen" onClick={() => navigate("push")} />
               <MenuItem icon={<Shield />} label={session ? "Mein Mitgliederbereich" : "Mitgliederbereich"} onClick={() => navigate(session ? "member" : "login")} />
-              {roles.includes("admin") && ( <MenuItem  icon={<Shield />}label="Administration" onClick={() => navigate("admin")}
-                />
-              )}
+              {roles.includes("admin") && (
+  <>
+    <MenuItem
+      icon={<Shield />}
+      label="Administration"
+      onClick={() => navigate("admin")}
+    />
+    <MenuItem
+      icon={<Users />}
+      label="Mannschaftsverwaltung"
+      onClick={() => navigate("admin-teams")}
+    />
+  </>
+)}
             </nav>
             {session && <button className="drawer-item" onClick={signOut}><LogOut /><span>Abmelden</span></button>}
           </aside>
