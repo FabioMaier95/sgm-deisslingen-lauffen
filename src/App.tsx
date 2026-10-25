@@ -439,18 +439,8 @@ type TrainerNews = {
 
 type TrainerTab = "matches" | "events" | "news";
 
+
 function TrainerPage({ userId }: { userId: string }) {
-  if (!supabase) {
-  return (
-    <section className="content-card">
-      <h2>Verbindung nicht verfügbar</h2>
-      <p>
-        Die Datenbankverbindung konnte nicht hergestellt werden.
-        Bitte lade die Seite erneut.
-      </p>
-    </section>
-  );
-  }
   const [teams, setTeams] = useState<TrainerTeam[]>([]);
   const [teamId, setTeamId] = useState("");
   const [tab, setTab] = useState<TrainerTab>("matches");
@@ -460,6 +450,34 @@ function TrainerPage({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  const [opponent, setOpponent] = useState("");
+  const [venue, setVenue] = useState("");
+  const [kickoff, setKickoff] = useState("");
+  const [isHome, setIsHome] = useState(true);
+
+  const [eventTitle, setEventTitle] = useState("");
+  const [eventDescription, setEventDescription] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [eventLocation, setEventLocation] = useState("");
+  const [eventPublic, setEventPublic] = useState(true);
+
+  const [newsTitle, setNewsTitle] = useState("");
+  const [newsBody, setNewsBody] = useState("");
+  const [newsPublic, setNewsPublic] = useState(true);
+
+  if (!supabase) {
+    return (
+      <section className="content-card">
+        <h2>Verbindung nicht verfügbar</h2>
+        <p>
+          Die Datenbankverbindung konnte nicht hergestellt werden.
+          Bitte lade die Seite erneut.
+        </p>
+      </section>
+    );
+  }
+
 
   const [opponent, setOpponent] = useState("");
   const [venue, setVenue] = useState("");
