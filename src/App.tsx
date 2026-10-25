@@ -145,6 +145,14 @@ const loadRoles = async (userId: string) => {
               <MenuItem icon={<Bell />} label="Push-Mitteilungen" onClick={() => navigate("push")} />
               <MenuItem icon={<Shield />} label={session ? "Mein Mitgliederbereich" : "Mitgliederbereich"} onClick={() => navigate(session ? "member" : "login")} />
               {roles.includes("admin") && (
+{roles.includes("trainer") && session && (
+  <MenuItem
+    icon={<Users />}
+    label="Trainerbereich"
+    onClick={() => navigate("trainer")}
+  />
+)}
+
   <>
     <MenuItem
       icon={<Shield />}
@@ -167,6 +175,10 @@ const loadRoles = async (userId: string) => {
       <main>
         {page === "home" && <HomePage onNavigate={navigate} pushEnabled={pushEnabled} onPush={() => setPushEnabled(!pushEnabled)} />}
         {page === "matches" && <MatchesPage />}
+{page === "trainer" && session && roles.includes("trainer") && (
+  <TrainerPage userId={session.user.id} />
+)}
+
         {page === "events" && <EventsPage />}
         {page === "news" && <NewsPage />}
         {page === "push" && <PushPage enabled={pushEnabled} onToggle={() => setPushEnabled(!pushEnabled)} />}
@@ -380,6 +392,174 @@ function HomePage({ onNavigate, pushEnabled, onPush }: { onNavigate: (p: string)
 
       <section className="section-head"><div><p className="eyebrow">Aktuell</p><h2>Neuigkeiten</h2></div><button className="text-button" onClick={() => onNavigate("news")}>Alle News <ChevronRight size={17}/></button></section>
       <article className="news-card"><span className="news-tag">Verein</span><h3>Die neue SGM-App kommt!</h3><p>Mit der neuen PWA sollen Spiele, Termine, News und Push-Mitteilungen künftig direkt auf dem Smartphone verfügbar sein.</p></article>
+    </div>
+  );
+}
+
+type TrainerTeam = {
+  id: string;
+  name: string;
+  sort_order: number;
+};
+
+function TrainerPage({ userId }: { userId: string }) {
+  const [teams, setTeams] = useState<TrainerTeam[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTeams() {
+      if (!supabase) {
+        setMessage("Supabase ist nicht verfügbar.");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setMessage("");
+
+      const { data: assignments, error: assignmentError } =
+        await supabase
+          .from("team_members")
+          .select("team_id")
+          .eq("profile_id", userId)
+          .eq("is_trainer", true);
+
+      if (assignmentError) {
+        if (!cancelled) {
+          setMessage(
+            `Mannschaftszuordnung konnte nicht geladen werden: ${assignmentError.message}`
+          );
+          setLoading(false);
+        }
+        return;
+      }
+
+      const teamIds = [
+        ...new Set((assignments ?? []).map((item) => item.team_id)),
+      ];
+
+      if (teamIds.length === 0) {
+        if (!cancelled) {
+          setTeams([]);
+          setSelectedTeamId("");
+          setMessage(
+            "Dir wurde noch keine Mannschaft als Trainer zugewiesen. Bitte wende dich an einen Administrator."
+          );
+          setLoading(false);
+        }
+        return;
+      }
+
+      const { data: teamData, error: teamError } = await supabase
+        .from("teams")
+        .select("id, name, sort_order")
+        .eq("is_active", true)
+        .in("id", teamIds)
+        .in("sort_order", [1, 2, 3])
+        .order("sort_order");
+
+      if (cancelled) return;
+
+      if (teamError) {
+        setMessage(
+          `Mannschaften konnten nicht geladen werden: ${teamError.message}`
+        );
+        setLoading(false);
+        return;
+      }
+
+      const loadedTeams = (teamData ?? []) as TrainerTeam[];
+
+      setTeams(loadedTeams);
+      setSelectedTeamId((current) =>
+        loadedTeams.some((team) => team.id === current)
+          ? current
+          : loadedTeams[0]?.id ?? ""
+      );
+
+      if (loadedTeams.length === 0) {
+        setMessage(
+          "Für dein Konto wurde keine aktive Mannschaft unter SGM I–III gefunden."
+        );
+      }
+
+      setLoading(false);
+    }
+
+    void loadTeams();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const selectedTeam = teams.find(
+    (team) => team.id === selectedTeamId
+  );
+
+  return (
+    <div className="content">
+      <PageTitle
+        eyebrow="Mannschaft"
+        title="Trainerbereich"
+        text="Verwalte die Inhalte deiner zugewiesenen Mannschaft."
+      />
+
+      {loading ? (
+        <p>Mannschaften werden geladen …</p>
+      ) : (
+        <>
+          {message && (
+            <div className="notice" role="status">
+              {message}
+            </div>
+          )}
+
+          {teams.length > 0 && (
+            <>
+              <section className="settings-card">
+                <label htmlFor="trainer-team">
+                  Meine Mannschaft
+                </label>
+
+                <select
+                  id="trainer-team"
+                  value={selectedTeamId}
+                  onChange={(event) =>
+                    setSelectedTeamId(event.target.value)
+                  }
+                >
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.sort_order === 1
+                        ? "SGM I"
+                        : team.sort_order === 2
+                          ? "SGM II"
+                          : "SGM III"}{" "}
+                      – {team.name}
+                    </option>
+                  ))}
+                </select>
+              </section>
+
+              {selectedTeam && (
+                <section className="settings-card">
+                  <p className="eyebrow">Ausgewählte Mannschaft</p>
+                  <h2>{selectedTeam.name}</h2>
+                  <p className="muted">
+                    Hier kommen die Verwaltungsbereiche für Spiele,
+                    Veranstaltungen und Mannschafts-News hin.
+                  </p>
+                </section>
+              )}
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }
