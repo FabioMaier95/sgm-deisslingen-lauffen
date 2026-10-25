@@ -440,6 +440,17 @@ type TrainerNews = {
 type TrainerTab = "matches" | "events" | "news";
 
 function TrainerPage({ userId }: { userId: string }) {
+  if (!supabase) {
+  return (
+    <section className="content-card">
+      <h2>Verbindung nicht verfügbar</h2>
+      <p>
+        Die Datenbankverbindung konnte nicht hergestellt werden.
+        Bitte lade die Seite erneut.
+      </p>
+    </section>
+  );
+  }
   const [teams, setTeams] = useState<TrainerTeam[]>([]);
   const [teamId, setTeamId] = useState("");
   const [tab, setTab] = useState<TrainerTab>("matches");
