@@ -399,7 +399,8 @@ function HomePage({ onNavigate, pushEnabled, onPush }: { onNavigate: (p: string)
       <article className="news-card"><span className="news-tag">Verein</span><h3>Die neue SGM-App kommt!</h3><p>Mit der neuen PWA sollen Spiele, Termine, News und Push-Mitteilungen künftig direkt auf dem Smartphone verfügbar sein.</p></article>
     </div>
   );
-type TrainerTeam = {
+}
+  type TrainerTeam = {
   id: string;
   name: string;
   sort_order: number;
