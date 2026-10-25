@@ -378,175 +378,676 @@ function HomePage({ onNavigate, pushEnabled, onPush }: { onNavigate: (p: string)
       <article className="news-card"><span className="news-tag">Verein</span><h3>Die neue SGM-App kommt!</h3><p>Mit der neuen PWA sollen Spiele, Termine, News und Push-Mitteilungen künftig direkt auf dem Smartphone verfügbar sein.</p></article>
     </div>
   );
-}
-
 type TrainerTeam = {
   id: string;
   name: string;
   sort_order: number;
 };
 
+type TrainerMatch = {
+  id: string;
+  team_id: string;
+  opponent: string;
+  venue: string | null;
+  kickoff_at: string | null;
+  is_home: boolean;
+  status: "scheduled" | "live" | "finished" | "postponed" | "cancelled";
+  home_score: number | null;
+  away_score: number | null;
+};
+
+type TrainerEvent = {
+  id: string;
+  team_id: string | null;
+  title: string;
+  description: string | null;
+  starts_at: string;
+  location: string | null;
+  is_public: boolean;
+};
+
+type TrainerNews = {
+  id: string;
+  team_id: string | null;
+  title: string;
+  body: string;
+  is_public: boolean;
+  published_at: string | null;
+};
+
+type TrainerTab = "matches" | "events" | "news";
+
 function TrainerPage({ userId }: { userId: string }) {
   const [teams, setTeams] = useState<TrainerTeam[]>([]);
-  const [selectedTeamId, setSelectedTeamId] = useState("");
+  const [teamId, setTeamId] = useState("");
+  const [tab, setTab] = useState<TrainerTab>("matches");
+  const [matchesData, setMatchesData] = useState<TrainerMatch[]>([]);
+  const [eventsData, setEventsData] = useState<TrainerEvent[]>([]);
+  const [newsData, setNewsData] = useState<TrainerNews[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  const [opponent, setOpponent] = useState("");
+  const [venue, setVenue] = useState("");
+  const [kickoff, setKickoff] = useState("");
+  const [isHome, setIsHome] = useState(true);
+
+  const [eventTitle, setEventTitle] = useState("");
+  const [eventDescription, setEventDescription] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [eventLocation, setEventLocation] = useState("");
+  const [eventPublic, setEventPublic] = useState(true);
+
+  const [newsTitle, setNewsTitle] = useState("");
+  const [newsBody, setNewsBody] = useState("");
+  const [newsPublic, setNewsPublic] = useState(true);
+
+  async function loadTeams() {
+    if (!supabase) return;
+
+    const { data: assignments, error: assignmentError } = await supabase
+      .from("team_members")
+      .select("team_id")
+      .eq("profile_id", userId)
+      .eq("is_trainer", true);
+
+    if (assignmentError) throw assignmentError;
+
+    const ids = [...new Set((assignments ?? []).map((row) => row.team_id))];
+
+    if (ids.length === 0) {
+      setTeams([]);
+      setTeamId("");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("teams")
+      .select("id, name, sort_order")
+      .eq("is_active", true)
+      .in("id", ids)
+      .order("sort_order");
+
+    if (error) throw error;
+
+    const loaded = (data ?? []) as TrainerTeam[];
+    setTeams(loaded);
+    setTeamId((current) =>
+      loaded.some((team) => team.id === current)
+        ? current
+        : loaded[0]?.id ?? ""
+    );
+  }
+
+  async function loadContent(selectedTeamId = teamId) {
+    if (!supabase || !selectedTeamId) {
+      setMatchesData([]);
+      setEventsData([]);
+      setNewsData([]);
+      return;
+    }
+
+    const [matchResult, eventResult, newsResult] = await Promise.all([
+      supabase
+        .from("matches")
+        .select("*")
+        .eq("team_id", selectedTeamId)
+        .order("kickoff_at", { ascending: true }),
+
+      supabase
+        .from("events")
+        .select("*")
+        .eq("team_id", selectedTeamId)
+        .order("starts_at", { ascending: true }),
+
+      supabase
+        .from("news")
+        .select("*")
+        .eq("team_id", selectedTeamId)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (matchResult.error) throw matchResult.error;
+    if (eventResult.error) throw eventResult.error;
+    if (newsResult.error) throw newsResult.error;
+
+    setMatchesData((matchResult.data ?? []) as TrainerMatch[]);
+    setEventsData((eventResult.data ?? []) as TrainerEvent[]);
+    setNewsData((newsResult.data ?? []) as TrainerNews[]);
+  }
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadTeams() {
-      if (!supabase) {
-        setMessage("Supabase ist nicht verfügbar.");
-        setLoading(false);
-        return;
-      }
-
+    async function init() {
       setLoading(true);
       setMessage("");
 
-      const { data: assignments, error: assignmentError } =
-        await supabase
-          .from("team_members")
-          .select("team_id")
-          .eq("profile_id", userId)
-          .eq("is_trainer", true);
-
-      if (assignmentError) {
+      try {
+        await loadTeams();
+      } catch (error) {
         if (!cancelled) {
           setMessage(
-            `Mannschaftszuordnung konnte nicht geladen werden: ${assignmentError.message}`
+            error instanceof Error
+              ? error.message
+              : "Mannschaften konnten nicht geladen werden."
           );
-          setLoading(false);
         }
-        return;
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      const teamIds = [
-        ...new Set((assignments ?? []).map((item) => item.team_id)),
-      ];
-
-      if (teamIds.length === 0) {
-        if (!cancelled) {
-          setTeams([]);
-          setSelectedTeamId("");
-          setMessage(
-            "Dir wurde noch keine Mannschaft als Trainer zugewiesen. Bitte wende dich an einen Administrator."
-          );
-          setLoading(false);
-        }
-        return;
-      }
-
-      const { data: teamData, error: teamError } = await supabase
-        .from("teams")
-        .select("id, name, sort_order")
-        .eq("is_active", true)
-        .in("id", teamIds)
-        .in("sort_order", [1, 2, 3])
-        .order("sort_order");
-
-      if (cancelled) return;
-
-      if (teamError) {
-        setMessage(
-          `Mannschaften konnten nicht geladen werden: ${teamError.message}`
-        );
-        setLoading(false);
-        return;
-      }
-
-      const loadedTeams = (teamData ?? []) as TrainerTeam[];
-
-      setTeams(loadedTeams);
-      setSelectedTeamId((current) =>
-        loadedTeams.some((team) => team.id === current)
-          ? current
-          : loadedTeams[0]?.id ?? ""
-      );
-
-      if (loadedTeams.length === 0) {
-        setMessage(
-          "Für dein Konto wurde keine aktive Mannschaft unter SGM I–III gefunden."
-        );
-      }
-
-      setLoading(false);
     }
 
-    void loadTeams();
+    void init();
 
     return () => {
       cancelled = true;
     };
   }, [userId]);
 
-  const selectedTeam = teams.find(
-    (team) => team.id === selectedTeamId
-  );
+  useEffect(() => {
+    if (!teamId) return;
+
+    let cancelled = false;
+
+    async function refresh() {
+      setLoading(true);
+      setMessage("");
+
+      try {
+        await loadContent(teamId);
+      } catch (error) {
+        if (!cancelled) {
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "Die Daten konnten nicht geladen werden."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void refresh();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [teamId]);
+
+  async function runSave(action: () => Promise<void>) {
+    setSaving(true);
+    setMessage("");
+
+    try {
+      await action();
+      await loadContent(teamId);
+      setMessage("Änderung erfolgreich gespeichert.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Die Aktion ist fehlgeschlagen."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addMatch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !teamId || !opponent.trim()) return;
+
+    await runSave(async () => {
+      const { error } = await supabase.from("matches").insert({
+        team_id: teamId,
+        opponent: opponent.trim(),
+        venue: venue.trim() || null,
+        kickoff_at: kickoff ? new Date(kickoff).toISOString() : null,
+        is_home: isHome,
+        status: "scheduled",
+      });
+
+      if (error) throw error;
+
+      setOpponent("");
+      setVenue("");
+      setKickoff("");
+      setIsHome(true);
+    });
+  }
+
+  async function updateMatch(
+    matchId: string,
+    updates: Partial<TrainerMatch>
+  ) {
+    if (!supabase) return;
+
+    await runSave(async () => {
+      const { error } = await supabase
+        .from("matches")
+        .update(updates)
+        .eq("id", matchId)
+        .eq("team_id", teamId);
+
+      if (error) throw error;
+    });
+  }
+
+  async function addEvent(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !teamId || !eventTitle.trim() || !eventDate) return;
+
+    await runSave(async () => {
+      const { error } = await supabase.from("events").insert({
+        team_id: teamId,
+        title: eventTitle.trim(),
+        description: eventDescription.trim() || null,
+        starts_at: new Date(eventDate).toISOString(),
+        location: eventLocation.trim() || null,
+        is_public: eventPublic,
+        created_by: userId,
+      });
+
+      if (error) throw error;
+
+      setEventTitle("");
+      setEventDescription("");
+      setEventDate("");
+      setEventLocation("");
+      setEventPublic(true);
+    });
+  }
+
+  async function addNews(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !teamId || !newsTitle.trim() || !newsBody.trim()) return;
+
+    await runSave(async () => {
+      const { error } = await supabase.from("news").insert({
+        team_id: teamId,
+        title: newsTitle.trim(),
+        body: newsBody.trim(),
+        is_public: newsPublic,
+        published_at: newsPublic ? new Date().toISOString() : null,
+        created_by: userId,
+      });
+
+      if (error) throw error;
+
+      setNewsTitle("");
+      setNewsBody("");
+      setNewsPublic(true);
+    });
+  }
+
+  async function deleteRow(
+    table: "matches" | "events" | "news",
+    id: string
+  ) {
+    if (!supabase) return;
+    if (!window.confirm("Diesen Eintrag wirklich löschen?")) return;
+
+    await runSave(async () => {
+      const { error } = await supabase
+        .from(table)
+        .delete()
+        .eq("id", id)
+        .eq("team_id", teamId);
+
+      if (error) throw error;
+    });
+  }
+
+  const dateLabel = (value: string | null) =>
+    value
+      ? new Date(value).toLocaleString("de-DE", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : "Noch kein Termin";
 
   return (
     <div className="content">
       <PageTitle
         eyebrow="Mannschaft"
         title="Trainerbereich"
-        text="Verwalte die Inhalte deiner zugewiesenen Mannschaft."
+        text="Verwalte Spiele, Veranstaltungen und News deiner Mannschaft."
       />
 
-      {loading ? (
-        <p>Mannschaften werden geladen …</p>
-      ) : (
-        <>
-          {message && (
-            <div className="notice" role="status">
-              {message}
-            </div>
-          )}
+      {message && (
+        <div className="notice" role="status">
+          {message}
+        </div>
+      )}
 
-          {teams.length > 0 && (
+      {loading && <p>Daten werden geladen …</p>}
+
+      {!loading && teams.length === 0 && (
+        <section className="settings-card">
+          <h2>Keine Mannschaft zugewiesen</h2>
+          <p>
+            Ein Administrator muss dir in der Mannschaftsverwaltung eine
+            aktive Mannschaft zuweisen und die Trainerfunktion aktivieren.
+          </p>
+        </section>
+      )}
+
+      {teams.length > 0 && (
+        <>
+          <section className="settings-card">
+            <label htmlFor="trainer-team">Meine Mannschaft</label>
+            <select
+              id="trainer-team"
+              value={teamId}
+              onChange={(event) => setTeamId(event.target.value)}
+            >
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </section>
+
+          <div className="team-tabs">
+            <button
+              className={tab === "matches" ? "active" : ""}
+              onClick={() => setTab("matches")}
+            >
+              Spiele
+            </button>
+            <button
+              className={tab === "events" ? "active" : ""}
+              onClick={() => setTab("events")}
+            >
+              Veranstaltungen
+            </button>
+            <button
+              className={tab === "news" ? "active" : ""}
+              onClick={() => setTab("news")}
+            >
+              News
+            </button>
+          </div>
+
+          {tab === "matches" && (
             <>
               <section className="settings-card">
-                <label htmlFor="trainer-team">
-                  Meine Mannschaft
-                </label>
+                <h2>Spiel hinzufügen</h2>
+                <form onSubmit={addMatch} className="trainer-form">
+                  <label htmlFor="match-opponent">Gegner *</label>
+                  <input
+                    id="match-opponent"
+                    value={opponent}
+                    onChange={(e) => setOpponent(e.target.value)}
+                    required
+                  />
 
-                <select
-                  id="trainer-team"
-                  value={selectedTeamId}
-                  onChange={(event) =>
-                    setSelectedTeamId(event.target.value)
-                  }
-                >
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.sort_order === 1
-                        ? "SGM I"
-                        : team.sort_order === 2
-                          ? "SGM II"
-                          : "SGM III"}{" "}
-                      – {team.name}
-                    </option>
-                  ))}
-                </select>
+                  <label htmlFor="match-kickoff">Datum und Uhrzeit</label>
+                  <input
+                    id="match-kickoff"
+                    type="datetime-local"
+                    value={kickoff}
+                    onChange={(e) => setKickoff(e.target.value)}
+                  />
+
+                  <label htmlFor="match-venue">Spielort</label>
+                  <input
+                    id="match-venue"
+                    value={venue}
+                    onChange={(e) => setVenue(e.target.value)}
+                  />
+
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={isHome}
+                      onChange={(e) => setIsHome(e.target.checked)}
+                    />{" "}
+                    Heimspiel
+                  </label>
+
+                  <button className="button" disabled={saving} type="submit">
+                    Spiel speichern
+                  </button>
+                </form>
               </section>
 
-              {selectedTeam && (
-                <section className="settings-card">
-                  <p className="eyebrow">Ausgewählte Mannschaft</p>
-                  <h2>{selectedTeam.name}</h2>
-                  <p className="muted">
-                    Hier kommen die Verwaltungsbereiche für Spiele,
-                    Veranstaltungen und Mannschafts-News hin.
-                  </p>
+              <h2>Spiele verwalten</h2>
+              {matchesData.length === 0 && <p>Noch keine Spiele vorhanden.</p>}
+
+              {matchesData.map((match) => (
+                <section className="settings-card" key={match.id}>
+                  <h3>{match.opponent}</h3>
+                  <p>{dateLabel(match.kickoff_at)}</p>
+                  <p>{match.venue || "Kein Spielort angegeben"}</p>
+                  <p>{match.is_home ? "Heimspiel" : "Auswärtsspiel"}</p>
+
+                  <label htmlFor={`status-${match.id}`}>Spielstatus</label>
+                  <select
+                    id={`status-${match.id}`}
+                    value={match.status}
+                    onChange={(e) =>
+                      void updateMatch(match.id, {
+                        status: e.target.value as TrainerMatch["status"],
+                      })
+                    }
+                  >
+                    <option value="scheduled">Geplant</option>
+                    <option value="live">Live</option>
+                    <option value="finished">Beendet</option>
+                    <option value="postponed">Verschoben</option>
+                    <option value="cancelled">Abgesagt</option>
+                  </select>
+
+                  <div className="trainer-score">
+                    <label>
+                      SGM
+                      <input
+                        type="number"
+                        min="0"
+                        value={match.home_score ?? ""}
+                        onChange={(e) =>
+                          setMatchesData((old) =>
+                            old.map((item) =>
+                              item.id === match.id
+                                ? {
+                                    ...item,
+                                    home_score:
+                                      e.target.value === ""
+                                        ? null
+                                        : Number(e.target.value),
+                                  }
+                                : item
+                            )
+                          )
+                        }
+                      />
+                    </label>
+                    <label>
+                      Gegner
+                      <input
+                        type="number"
+                        min="0"
+                        value={match.away_score ?? ""}
+                        onChange={(e) =>
+                          setMatchesData((old) =>
+                            old.map((item) =>
+                              item.id === match.id
+                                ? {
+                                    ...item,
+                                    away_score:
+                                      e.target.value === ""
+                                        ? null
+                                        : Number(e.target.value),
+                                  }
+                                : item
+                            )
+                          )
+                        }
+                      />
+                    </label>
+                    <button
+                      className="button"
+                      disabled={saving}
+                      onClick={() =>
+                        void updateMatch(match.id, {
+                          home_score: match.home_score,
+                          away_score: match.away_score,
+                        })
+                      }
+                    >
+                      Ergebnis speichern
+                    </button>
+                  </div>
+
+                  <button
+                    className="text-button"
+                    disabled={saving}
+                    onClick={() => void deleteRow("matches", match.id)}
+                  >
+                    Spiel löschen
+                  </button>
                 </section>
-              )}
+              ))}
+            </>
+          )}
+
+          {tab === "events" && (
+            <>
+              <section className="settings-card">
+                <h2>Veranstaltung erstellen</h2>
+                <form onSubmit={addEvent} className="trainer-form">
+                  <label htmlFor="event-title">Titel *</label>
+                  <input
+                    id="event-title"
+                    value={eventTitle}
+                    onChange={(e) => setEventTitle(e.target.value)}
+                    required
+                  />
+
+                  <label htmlFor="event-date">Datum und Uhrzeit *</label>
+                  <input
+                    id="event-date"
+                    type="datetime-local"
+                    value={eventDate}
+                    onChange={(e) => setEventDate(e.target.value)}
+                    required
+                  />
+
+                  <label htmlFor="event-location">Ort</label>
+                  <input
+                    id="event-location"
+                    value={eventLocation}
+                    onChange={(e) => setEventLocation(e.target.value)}
+                  />
+
+                  <label htmlFor="event-description">Beschreibung</label>
+                  <textarea
+                    id="event-description"
+                    value={eventDescription}
+                    onChange={(e) => setEventDescription(e.target.value)}
+                    rows={4}
+                  />
+
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={eventPublic}
+                      onChange={(e) => setEventPublic(e.target.checked)}
+                    />{" "}
+                    Öffentlich anzeigen
+                  </label>
+
+                  <button className="button" disabled={saving} type="submit">
+                    Veranstaltung speichern
+                  </button>
+                </form>
+              </section>
+
+              <h2>Veranstaltungen verwalten</h2>
+              {eventsData.map((event) => (
+                <section className="settings-card" key={event.id}>
+                  <h3>{event.title}</h3>
+                  <p>{dateLabel(event.starts_at)}</p>
+                  <p>{event.location || "Kein Ort angegeben"}</p>
+                  <p>{event.is_public ? "Öffentlich" : "Nicht öffentlich"}</p>
+                  <button
+                    className="text-button"
+                    disabled={saving}
+                    onClick={() => void deleteRow("events", event.id)}
+                  >
+                    Veranstaltung löschen
+                  </button>
+                </section>
+              ))}
+              {eventsData.length === 0 && <p>Noch keine Veranstaltungen vorhanden.</p>}
+            </>
+          )}
+
+          {tab === "news" && (
+            <>
+              <section className="settings-card">
+                <h2>News erstellen</h2>
+                <form onSubmit={addNews} className="trainer-form">
+                  <label htmlFor="news-title">Überschrift *</label>
+                  <input
+                    id="news-title"
+                    value={newsTitle}
+                    onChange={(e) => setNewsTitle(e.target.value)}
+                    required
+                  />
+
+                  <label htmlFor="news-body">Text *</label>
+                  <textarea
+                    id="news-body"
+                    value={newsBody}
+                    onChange={(e) => setNewsBody(e.target.value)}
+                    rows={6}
+                    required
+                  />
+
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={newsPublic}
+                      onChange={(e) => setNewsPublic(e.target.checked)}
+                    />{" "}
+                    Öffentlich veröffentlichen
+                  </label>
+
+                  <button className="button" disabled={saving} type="submit">
+                    News speichern
+                  </button>
+                </form>
+              </section>
+
+              <h2>News verwalten</h2>
+              {newsData.map((news) => (
+                <section className="settings-card" key={news.id}>
+                  <h3>{news.title}</h3>
+                  <p>{news.body}</p>
+                  <p>{news.is_public ? "Öffentlich" : "Nicht öffentlich"}</p>
+                  <button
+                    className="text-button"
+                    disabled={saving}
+                    onClick={() => void deleteRow("news", news.id)}
+                  >
+                    News löschen
+                  </button>
+                </section>
+              ))}
+              {newsData.length === 0 && <p>Noch keine News vorhanden.</p>}
             </>
           )}
         </>
       )}
     </div>
   );
-}
+                                                     }
 
 function MatchesPage() {
   return <div className="content"><PageTitle eyebrow="FUSSBALL.DE / DFBnet" title="Spiele & Ergebnisse" text="Diese Ansicht ist für die automatische Synchronisation mit den offiziellen Spieldaten vorbereitet."/><div className="team-tabs"><button className="active">Aktive</button><button>Jugend</button></div>{matches.map(m => <div className="match-card compact" key={m.id}><div className="match-meta"><span>{m.team} · {m.competition}</span><span>{m.date}</span></div><div className="compact-main"><div><strong>{m.home ? "SGM Deißlingen-Lauffen" : m.opponent}</strong><span className="muted"> {m.home ? "–" : "vs."} </span><strong>{m.home ? m.opponent : "SGM Deißlingen-Lauffen"}</strong></div><div className="time">{m.time}</div></div><div className="match-info"><span><MapPin size={16}/>{m.venue}</span></div></div>)}</div>;
