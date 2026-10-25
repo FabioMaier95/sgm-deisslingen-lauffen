@@ -143,28 +143,12 @@ const loadRoles = async (userId: string) => {
               <MenuItem icon={<CalendarDays />} label="Veranstaltungen" onClick={() => navigate("events")} />
               <MenuItem icon={<Newspaper />} label="News" onClick={() => navigate("news")} />
               <MenuItem icon={<Bell />} label="Push-Mitteilungen" onClick={() => navigate("push")} />
-              <MenuItem icon={<Shield />} label={session ? "Mein Mitgliederbereich" : "Mitgliederbereich"} onClick={() => navigate(session ? "member" : "login")} />
-              {roles.includes("admin") && (
-{roles.includes("trainer") && session && (
-  <MenuItem
-    icon={<Users />}
-    label="Trainerbereich"
-    onClick={() => navigate("trainer")}
-  />
-)}
-
-  <>
-    <MenuItem
-      icon={<Shield />}
-      label="Administration"
-      onClick={() => navigate("admin")}
-    />
-    <MenuItem
-      icon={<Users />}
-      label="Mannschaftsverwaltung"
-      onClick={() => navigate("admin-teams")}
-    />
-  </>
+              <MenuItem icon={<Shield />} label={session ? "Mein Mitgliederbereich" : "Mitgliederbereich"} onClick={() => navigate(session ? "member" : "login")} /> {session && roles.includes("trainer") && (
+              <MenuItem icon={<Users />} label="Trainerbereich" onClick={() => navigate("trainer")} />)} {session && roles.includes("admin") && (  <>
+              <MenuItem icon={<Shield />} label="Administration" onClick={() => navigate("admin")} />
+              <MenuItem icon={<Users />} label="Mannschaftsverwaltung" onClick={() => navigate("admin-teams")} />  </>)}  <>
+              <MenuItem icon={<Shield />}   label="Administration"   onClick={() => navigate("admin")}  />
+              <MenuItem icon={<Users />} label="Mannschaftsverwaltung"   onClick={() => navigate("admin-teams")}   />  </>
 )}
             </nav>
             {session && <button className="drawer-item" onClick={signOut}><LogOut /><span>Abmelden</span></button>}
