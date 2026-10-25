@@ -112,3 +112,57 @@ footer { border-top: 1px solid var(--line); background: white; padding: 22px 18p
 .notice{margin:12px 0;padding:12px;border-radius:12px;background:#f4f4f4;font-size:.9rem}
 .centered{justify-content:center;width:100%;margin-top:12px}
 button:disabled{opacity:.6;cursor:not-allowed}
+/* Trainerbereich */
+.trainer-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.trainer-form input:not([type="checkbox"]),
+.trainer-form textarea,
+.trainer-form select,
+.settings-card select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+}
+
+.trainer-form textarea {
+  resize: vertical;
+}
+
+.trainer-form label,
+.settings-card > label {
+  display: block;
+  margin-top: 8px;
+}
+
+.trainer-form input[type="checkbox"] {
+  width: auto;
+  margin-right: 6px;
+}
+
+.trainer-score {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin: 16px 0;
+}
+
+.trainer-score label {
+  display: grid;
+  gap: 6px;
+}
+
+.trainer-score input {
+  width: 80px;
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+}
